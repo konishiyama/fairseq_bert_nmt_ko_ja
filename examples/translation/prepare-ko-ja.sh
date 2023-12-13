@@ -24,10 +24,13 @@ mkdir -p $orig $tmp $prep
 
 echo "Downloading data from Google Drive..."
 # You might need to use gdown or a similar tool to download directly from Google Drive
-# gdown 'https://drive.google.com/uc?id=1UAyxanGMvL_gQVefZfWcpqNSvtu3oSCj'
+# gdown 'https://drive.google.com/file/d/1T57hI8AULVDJ4oe5KLUVScakQQxILga2/view?usp=sharing'
 pip install gdown
-gdown --id 1UAyxanGMvL_gQVefZfWcpqNSvtu3oSCj --output $orig/ja-ko.json
-
+gdown --id 1T57hI8AULVDJ4oe5KLUVScakQQxILga2 --output $orig/ja-ko.json
+if [ $? -ne 0 ]; then
+    echo "Error: Download failed. Exiting script."
+    exit 1
+fi
 # Assuming JSON file is named 'data.json' and is already in the 'orig' directory
 echo "Pre-processing JSON data..."
 python -c "import json; \
