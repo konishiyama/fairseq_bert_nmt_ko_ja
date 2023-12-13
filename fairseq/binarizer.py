@@ -18,6 +18,8 @@ from fairseq.file_chunker_utils import Chunker, find_offsets
 from fairseq.file_io import PathManager
 from fairseq.tokenizer import tokenize_line
 
+from bert import BertTokenizer
+
 logger = logging.getLogger("binarizer")
 
 
@@ -238,13 +240,16 @@ class VocabularyDatasetBinarizer(Binarizer):
 
     def __init__(
         self,
-        dict: Dictionary,
+        # dict: Dictionary,
+        dict_or_tokenizer,
         tokenize: tp.Callable[[str], tp.List[str]] = tokenize_line,
         append_eos: bool = True,
         reverse_order: bool = False,
         already_numberized: bool = False,
     ) -> None:
-        self.dict = dict
+        # self.dict = dict
+        self.dict_or_tokenizer = dict_or_tokenizer
+        self.is_bert_tokenizer = isinstance(dict_or_tokenizer, BertTokenizer)
         self.tokenize = tokenize
         self.append_eos = append_eos
         self.reverse_order = reverse_order
@@ -256,30 +261,60 @@ class VocabularyDatasetBinarizer(Binarizer):
         line: str,
         summary: BinarizeSummary,
     ):
-        if summary.replaced is None:
-            summary.replaced = Counter()
-
         def replaced_consumer(word, idx):
-            if idx == self.dict.unk_index and word != self.dict.unk_word:
+            if idx == self.dict_or_tokenizer.unk_index and word != self.dict_or_tokenizer.unk_word:
+                if summary.replaced is None:
+                    summary.replaced = Counter()
                 summary.replaced.update([word])
 
-        if self.already_numberized:
-            id_strings = line.strip().split()
-            id_list = [int(id_string) for id_string in id_strings]
-            if self.reverse_order:
-                id_list.reverse()
-            if self.append_eos:
-                id_list.append(self.dict.eos())
-            ids = torch.IntTensor(id_list)
+        def replaced_consumer_for_bert(word, idx):
+            if idx == self.dict_or_tokenizer.unk_index and word != self.dict_or_tokenizer.unk_word:
+                summary.replaced.update([word])
+
+        if self.is_bert_tokenizer:
+            line = line.strip()
+            line = '{} {} {}'.format('[CLS]', line, '[SEP]')
+            tokenizedline = self.dict_or_tokenizer.tokenize(line)
+            if len(tokenizedline) > self.dict_or_tokenizer.max_len:
+                tokenizedline = tokenizedline[:self.dict_or_tokenizer.max_len-1]
+                tokenizedline.append('[SEP]')
+            words = self.dict_or_tokenizer.convert_tokens_to_ids(tokenizedline)
+            nwords = len(words)
+            ids = torch.IntTensor(nwords)
+            for i, word in enumerate(words):
+                ids[i] = word
+                replaced_consumer_for_bert(tokenizedline[i], word)
+            
         else:
-            ids = self.dict.encode_line(
-                line=line,
-                line_tokenizer=self.tokenize,
-                add_if_not_exist=False,
-                consumer=replaced_consumer,
-                append_eos=self.append_eos,
-                reverse_order=self.reverse_order,
-            )
+            # if summary.replaced is None:
+            #     summary.replaced = Counter()
+
+            # def replaced_consumer(word, idx):
+            #     if idx == self.dict.unk_index and word != self.dict.unk_word:
+            #         summary.replaced.update([word])
+            if summary.replaced is None:
+                        summary.replaced = Counter()
+            # def replaced_consumer(word, idx):
+            #     if idx == self.dict_or_tokenizer.unk_index and word != self.dict_or_tokenizer.unk_word:
+            #         summary.replaced.update([word])
+
+            if self.already_numberized:
+                id_strings = line.strip().split()
+                id_list = [int(id_string) for id_string in id_strings]
+                if self.reverse_order:
+                    id_list.reverse()
+                if self.append_eos:
+                    id_list.append(self.dict_or_tokenizer.eos())
+                ids = torch.IntTensor(id_list)
+            else:
+                ids = self.dict_or_tokenizer.encode_line(
+                    line=line,
+                    line_tokenizer=self.tokenize,
+                    add_if_not_exist=False,
+                    consumer=replaced_consumer,
+                    append_eos=self.append_eos,
+                    reverse_order=self.reverse_order,
+                )
 
         summary.num_seq += 1
         summary.num_tok += len(ids)
