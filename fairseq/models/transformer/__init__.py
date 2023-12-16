@@ -11,9 +11,12 @@ from .transformer_config import (
     DEFAULT_MIN_PARAMS_TO_WRAP,
 )
 from .transformer_decoder import TransformerDecoder, TransformerDecoderBase, Linear
+from .transformer_decoder2 import TransformerDecoder2, TransformerDecoderBase2, Linear
 from .transformer_encoder import TransformerEncoder, TransformerEncoderBase
+from .transformer_encoder2 import TransformerEncoder2, TransformerEncoderBase2
 from .transformer_legacy import (
     TransformerModel,
+    TransformerS2Model,
     base_architecture,
     tiny_architecture,
     transformer_iwslt_de_en,
@@ -31,9 +34,14 @@ __all__ = [
     "TransformerConfig",
     "TransformerDecoder",
     "TransformerDecoderBase",
+    "TransformerDecoder2",
+    "TransformerDecoderBase2",
     "TransformerEncoder",
     "TransformerEncoderBase",
+    "TransformerEncoder2",
+    "TransformerEncoderBase2",
     "TransformerModel",
+    "TransformerS2Model",
     "Embedding",
     "Linear",
     "base_architecture",

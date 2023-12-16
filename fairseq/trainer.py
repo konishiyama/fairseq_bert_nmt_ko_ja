@@ -469,6 +469,9 @@ class Trainer(object):
         reset_lr_scheduler=False,
         optimizer_overrides=None,
         reset_meters=False,
+        # 
+        warmup_from_nmt=False,
+        # 
     ):
         """
         Load all training state from a checkpoint file.
@@ -583,7 +586,9 @@ class Trainer(object):
                     logger.info(self.model)
 
                 self.model.load_state_dict(
-                    state["model"], strict=True, model_cfg=self.cfg.model
+                    # 
+                    state["model"], strict=False if warmup_from_nmt else True,  model_cfg=self.cfg.model
+                    # 
                 )
                 # save memory for later steps
                 del state["model"]
@@ -616,7 +621,12 @@ class Trainer(object):
 
             if not reset_lr_scheduler:
                 self.lr_scheduler.load_state_dict(last_optim["lr_scheduler_state"])
-
+            #
+                
+            if not warmup_from_nmt:
+                self.optimizer.load_state_dict(last_optim_state, optimizer_overrides)
+            
+            # 
             if self.is_fsdp and not self.model.use_sharded_state:
                 # if use_sharded_state, the last_optim_state is already sharded, skip this
                 last_optim_state = self.model.get_shard_from_optim_state_dict(
@@ -630,7 +640,12 @@ class Trainer(object):
             self.optimizer.load_state_dict(last_optim_state, optimizer_overrides)
 
             self.set_num_updates(last_optim["num_updates"])
+            # 
 
+            if reset_lr_scheduler and warmup_from_nmt:
+                self.set_num_updates(0)
+            
+            # 
         if extra_state is not None:
             itr_state = extra_state["train_iterator"]
             epoch = itr_state["epoch"]

@@ -17,6 +17,9 @@ def collate(
     samples,
     pad_idx,
     eos_idx,
+    # 
+    bert_pad_idx,
+    # 
     left_pad_source=True,
     left_pad_target=False,
     input_feeding=True,
@@ -25,18 +28,18 @@ def collate(
 ):
     if len(samples) == 0:
         return {}
-
-    def merge(key, left_pad, move_eos_to_beginning=False, pad_to_length=None):
+    # 
+    def merge(key, left_pad, move_eos_to_beginning=False, pad_to_length=None, bert_input=False):
         return data_utils.collate_tokens(
             [s[key] for s in samples],
-            pad_idx,
+            pad_idx if not bert_input else bert_pad_idx,
             eos_idx,
             left_pad,
             move_eos_to_beginning,
             pad_to_length=pad_to_length,
             pad_to_multiple=pad_to_multiple,
         )
-
+    # 
     def check_alignment(alignment, src_len, tgt_len):
         if alignment is None or len(alignment) == 0:
             return False
@@ -70,6 +73,10 @@ def collate(
         left_pad=left_pad_source,
         pad_to_length=pad_to_length["source"] if pad_to_length is not None else None,
     )
+    # 
+    src_bert_tokens = merge('source_bert', left_pad=left_pad_source, bert_input=True)
+    # 
+
     # sort by descending source length
     src_lengths = torch.LongTensor(
         [s["source"].ne(pad_idx).long().sum() for s in samples]
@@ -77,7 +84,9 @@ def collate(
     src_lengths, sort_order = src_lengths.sort(descending=True)
     id = id.index_select(0, sort_order)
     src_tokens = src_tokens.index_select(0, sort_order)
-
+    # 
+    src_bert_tokens = src_bert_tokens.index_select(0, sort_order)
+    # 
     prev_output_tokens = None
     target = None
     if samples[0].get("target", None) is not None:
@@ -117,6 +126,9 @@ def collate(
         "net_input": {
             "src_tokens": src_tokens,
             "src_lengths": src_lengths,
+            # 
+            'bert_input': src_bert_tokens,
+            # 
         },
         "target": target,
     }
@@ -212,6 +224,9 @@ class LanguagePairDataset(FairseqDataset):
         tgt=None,
         tgt_sizes=None,
         tgt_dict=None,
+        srcbert=None, 
+        srcbert_sizes=None, 
+        berttokenizer=None,
         left_pad_source=True,
         left_pad_target=False,
         shuffle=True,
@@ -237,8 +252,14 @@ class LanguagePairDataset(FairseqDataset):
             ), "Source and target must contain the same number of examples"
         self.src = src
         self.tgt = tgt
+        # 
+        self.srcbert = srcbert
+        # 
         self.src_sizes = np.array(src_sizes)
         self.tgt_sizes = np.array(tgt_sizes) if tgt_sizes is not None else None
+        # 
+        self.srcbert_sizes = np.array(srcbert_sizes) if srcbert_sizes is not None else None
+        # 
         self.sizes = (
             np.vstack((self.src_sizes, self.tgt_sizes)).T
             if self.tgt_sizes is not None
@@ -246,6 +267,7 @@ class LanguagePairDataset(FairseqDataset):
         )
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
+        self.berttokenizer = berttokenizer
         self.left_pad_source = left_pad_source
         self.left_pad_target = left_pad_target
         self.shuffle = shuffle
@@ -304,6 +326,9 @@ class LanguagePairDataset(FairseqDataset):
     def __getitem__(self, index):
         tgt_item = self.tgt[index] if self.tgt is not None else None
         src_item = self.src[index]
+        # 
+        src_bert_item = self.srcbert[index]
+        # 
         # Append EOS to end of tgt sentence if it does not have an EOS and remove
         # EOS from end of src sentence if it exists. This is useful when we use
         # use existing datasets for opposite directions i.e., when we want to
@@ -331,6 +356,9 @@ class LanguagePairDataset(FairseqDataset):
             "id": index,
             "source": src_item,
             "target": tgt_item,
+            # 
+            'source_bert': src_bert_item
+            # 
         }
         if self.align_dataset is not None:
             example["alignment"] = self.align_dataset[index]
@@ -381,6 +409,9 @@ class LanguagePairDataset(FairseqDataset):
             samples,
             pad_idx=self.src_dict.pad(),
             eos_idx=self.eos,
+            # 
+            bert_pad_idx=self.berttokenizer.pad(),
+            # 
             left_pad_source=self.left_pad_source,
             left_pad_target=self.left_pad_target,
             input_feeding=self.input_feeding,
@@ -403,10 +434,15 @@ class LanguagePairDataset(FairseqDataset):
     def num_tokens(self, index):
         """Return the number of tokens in a sample. This value is used to
         enforce ``--max-tokens`` during batching."""
-        return max(
-            self.src_sizes[index],
-            self.tgt_sizes[index] if self.tgt_sizes is not None else 0,
-        )
+        # 
+        a = max(self.src_sizes[index], self.tgt_sizes[index] if self.tgt_sizes is not None else 0)
+        return max(a, self.srcbert_sizes[index])
+        # 
+        
+        # return max(
+        #     self.src_sizes[index],
+        #     self.tgt_sizes[index] if self.tgt_sizes is not None else 0,
+        # )
 
     def num_tokens_vec(self, indices):
         """Return the number of tokens for a set of positions defined by indices.

@@ -29,8 +29,9 @@ from fairseq.data import (
 from fairseq.data.indexed_dataset import get_available_dataset_impl
 from fairseq.dataclass import ChoiceEnum, FairseqDataclass
 from fairseq.tasks import FairseqTask, register_task
-
-
+# 
+from bert import BertTokenizer
+# 
 EVAL_BLEU_ORDER = 4
 
 
@@ -51,6 +52,9 @@ def load_langpair_dataset(
     left_pad_target,
     max_source_positions,
     max_target_positions,
+    # 
+    bert_model_name,
+    # 
     prepend_bos=False,
     load_alignments=False,
     truncate_source=False,
@@ -66,6 +70,9 @@ def load_langpair_dataset(
 
     src_datasets = []
     tgt_datasets = []
+    # 
+    srcbert_datasets = []
+    # 
 
     for k in itertools.count():
         split_k = split + (str(k) if k > 0 else "")
@@ -73,8 +80,10 @@ def load_langpair_dataset(
         # infer langcode
         if split_exists(split_k, src, tgt, src, data_path):
             prefix = os.path.join(data_path, "{}.{}-{}.".format(split_k, src, tgt))
+            bertprefix = os.path.join(data_path, '{}.bert.{}-{}.'.format(split_k, src, tgt))
         elif split_exists(split_k, tgt, src, src, data_path):
             prefix = os.path.join(data_path, "{}.{}-{}.".format(split_k, tgt, src))
+            bertprefix =  os.path.join(data_path, '{}.bert.{}-{}.'.format(split_k, tgt, src))
         else:
             if k > 0:
                 break
@@ -102,6 +111,14 @@ def load_langpair_dataset(
         if tgt_dataset is not None:
             tgt_datasets.append(tgt_dataset)
 
+        # dictionaryはなしでよいはず、、、
+        srcbert_dataset = data_utils.load_indexed_dataset(
+            bertprefix + src, dataset_impl
+        )
+        if srcbert_dataset is not None:
+            srcbert_datasets.append(srcbert_dataset)
+        # 
+            
         logger.info(
             "{} {} {}-{} {} examples".format(
                 data_path, split_k, src, tgt, len(src_datasets[-1])
@@ -116,6 +133,9 @@ def load_langpair_dataset(
     if len(src_datasets) == 1:
         src_dataset = src_datasets[0]
         tgt_dataset = tgt_datasets[0] if len(tgt_datasets) > 0 else None
+        # 
+        srcbert_datasets = srcbert_datasets[0]
+        # 
     else:
         sample_ratios = [1] * len(src_datasets)
         sample_ratios[0] = upsample_primary
@@ -154,6 +174,9 @@ def load_langpair_dataset(
             )
 
     tgt_dataset_sizes = tgt_dataset.sizes if tgt_dataset is not None else None
+    # 
+    berttokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    # 
     return LanguagePairDataset(
         src_dataset,
         src_dataset.sizes,
@@ -161,6 +184,11 @@ def load_langpair_dataset(
         tgt_dataset,
         tgt_dataset_sizes,
         tgt_dict,
+        # 
+        srcbert_datasets, 
+        srcbert_datasets.sizes, 
+        berttokenizer,
+        # 
         left_pad_source=left_pad_source,
         left_pad_target=left_pad_target,
         align_dataset=align_dataset,
@@ -213,6 +241,54 @@ class TranslationConfig(FairseqDataclass):
     upsample_primary: int = field(
         default=-1, metadata={"help": "the amount of upsample primary dataset"}
     )
+
+    # 新しいArguments
+    bert_model_name: str = field(
+        default='bert-base-uncased'
+    )
+    encoder_ratio: float = field(
+        default=1.
+    )
+    bert_ratio: float = field(
+        default=1.
+    )
+    finetune_bert: bool = field(
+        default=False, metadata={"action": "store_true"}
+    )
+    mask_cls_sep: bool = field(
+        default=False, metadata={"action": "store_true"}
+    )
+    warmup_from_nmt: bool = field(
+        default=False, metadata={"action": "store_true"}
+    )
+    # ここのパスは変えない
+    warmup_nmt_file: str = field(
+        default='checkpoint_nmt.pt'
+    )
+    bert_gates: int = field(
+        default=[1, 1, 1, 1, 1, 1], metadata={"action": "store_true"}
+    )
+    bert_first: bool = field(
+        default=False, metadata={"action": "store_false"}
+    )
+    encoder_bert_dropout: bool = field(
+        default=False, metadata={"action": "store_true"}
+    )
+    encoder_bert_dropout_ratio: float = field(
+        default=0.25
+    )
+    bert_output_layer: int = field(
+        default=-1
+    )
+    encoder_bert_mixup: bool = field(
+        default=False, metadata={"action": "store_true"}
+    )
+    decoder_no_bert: bool = field(
+        default=False, metadata={"action": "store_true"}
+    )
+
+    # 
+
     truncate_source: bool = field(
         default=False, metadata={"help": "truncate source to max-source-positions"}
     )
@@ -286,6 +362,9 @@ class TranslationTask(FairseqTask):
         super().__init__(cfg)
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
+        # 
+        self.bert_model_name = cfg.bert_model_name
+        # 
 
     @classmethod
     def setup_task(cls, cfg: TranslationConfig, **kwargs):
@@ -355,13 +434,21 @@ class TranslationTask(FairseqTask):
             num_buckets=self.cfg.num_batch_buckets,
             shuffle=(split != "test"),
             pad_to_multiple=self.cfg.required_seq_len_multiple,
+            # 
+            bert_model_name = self.bert_model_name
+            # 
         )
 
-    def build_dataset_for_inference(self, src_tokens, src_lengths, constraints=None):
+    def build_dataset_for_inference(self, src_tokens, src_lengths, srcbert, srcbert_sizes, berttokenizer, constraints=None):
         return LanguagePairDataset(
             src_tokens,
             src_lengths,
             self.source_dictionary,
+            # 
+            srcbert=srcbert, 
+            srcbert_sizes=srcbert_sizes, 
+            berttokenizer=berttokenizer,
+            # 
             tgt_dict=self.target_dictionary,
             constraints=constraints,
         )

@@ -32,7 +32,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 logger = logging.getLogger(__name__)
 
 
-def save_checkpoint(cfg: CheckpointConfig, trainer, epoch_itr, val_loss):
+def save_checkpoint(cfg: CheckpointConfig, trainer, epoch_itr, val_loss,warmup_from_nmt=False):
     from fairseq import meters
 
     # only one worker should attempt to create the required dir
@@ -58,7 +58,9 @@ def save_checkpoint(cfg: CheckpointConfig, trainer, epoch_itr, val_loss):
     write_timer.start()
 
     epoch = epoch_itr.epoch
-    end_of_epoch = epoch_itr.end_of_epoch()
+    # 
+    end_of_epoch = epoch_itr.end_of_epoch() if not warmup_from_nmt else True 
+    # 
     updates = trainer.get_num_updates()
 
     logger.info(f"Preparing to save checkpoint for epoch {epoch} @ {updates} updates")
@@ -231,9 +233,20 @@ def load_checkpoint(cfg: CheckpointConfig, trainer, **passthrough_args):
     if (
         cfg.restore_file == "checkpoint_last.pt"
     ):  # default value of restore_file is 'checkpoint_last.pt'
-        checkpoint_path = os.path.join(
-            cfg.save_dir, "checkpoint_last{}.pt".format(suffix)
-        )
+        
+        # 
+        if cfg.warmup_from_nmt:
+            if os.path.isabs(cfg.warmup_nmt_file):
+                checkpoint_path = cfg.warmup_nmt_file
+            else:
+                checkpoint_path = os.path.join(cfg.save_dir, cfg.warmup_nmt_file)
+            assert os.path.exists(checkpoint_path), 'You should specify right --warmup-nmt-file if you use --restore-file flag'
+            print('Model will load checkpoint from {}'.format(checkpoint_path))
+        else:
+            # 
+            checkpoint_path = os.path.join(
+                cfg.save_dir, "checkpoint_last{}.pt".format(suffix)
+            )
         first_launch = not PathManager.exists(checkpoint_path)
         if first_launch and getattr(cfg, "continue_once", None) is not None:
             checkpoint_path = cfg.continue_once
@@ -271,6 +284,9 @@ def load_checkpoint(cfg: CheckpointConfig, trainer, **passthrough_args):
         reset_lr_scheduler,
         optimizer_overrides,
         reset_meters=reset_meters,
+        # 
+        warmup_from_nmt=cfg.warmup_from_nmt,
+        # 
     )
 
     if (
