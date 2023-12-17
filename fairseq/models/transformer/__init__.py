@@ -27,10 +27,12 @@ from .transformer_legacy import (
     transformer_wmt_en_de_big_t2t,
 )
 from .transformer_base import TransformerModelBase, Embedding
+from .transformer_base2 import TransformerModelBase2, Embedding
 
 
 __all__ = [
     "TransformerModelBase",
+    "TransformerModelBase2",
     "TransformerConfig",
     "TransformerDecoder",
     "TransformerDecoderBase",

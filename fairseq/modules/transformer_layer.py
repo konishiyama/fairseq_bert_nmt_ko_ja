@@ -517,6 +517,17 @@ class TransformerEncoderLayer2(TransformerEncoderLayerBase2):
         return super().build_self_attention(
             embed_dim, TransformerConfig.from_namespace(args)
         )
+    
+# backward compatible with the legacy argparse format
+class TransformerEncoderLayer(TransformerEncoderLayerBase):
+    def __init__(self, args):
+        super().__init__(TransformerConfig.from_namespace(args))
+        self.args = args
+
+    def build_self_attention(self, embed_dim, args):
+        return super().build_self_attention(
+            embed_dim, TransformerConfig.from_namespace(args)
+        )
 
 
 class TransformerDecoderLayerBase(nn.Module):

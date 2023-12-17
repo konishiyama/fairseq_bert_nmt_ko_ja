@@ -32,7 +32,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 logger = logging.getLogger(__name__)
 
 
-def save_checkpoint(cfg: CheckpointConfig, trainer, epoch_itr, val_loss,warmup_from_nmt=False):
+def save_checkpoint(cfg: CheckpointConfig, trainer, epoch_itr, val_loss, warmup_from_nmt=False):
     from fairseq import meters
 
     # only one worker should attempt to create the required dir
