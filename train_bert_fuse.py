@@ -42,9 +42,11 @@ from fairseq.trainer import Trainer
 
 
 def main(cfg: FairseqConfig) -> None:
+    print('hello')
     if isinstance(cfg, argparse.Namespace):
         cfg = convert_namespace_to_omegaconf(cfg)
-
+    print("cfg:")
+    print(cfg)
     utils.import_user_module(cfg.common)
     add_defaults(cfg)
 
@@ -85,7 +87,7 @@ def main(cfg: FairseqConfig) -> None:
 
     # Setup task, e.g., translation, language modeling, etc.
     task = tasks.setup_task(cfg.task)
-
+    
     assert cfg.criterion, "Please specify criterion to train a model"
 
     # Build model and criterion
@@ -576,7 +578,7 @@ def cli_main(
     args = options.parse_args_and_arch(parser, modify_parser=modify_parser)
 
     cfg = convert_namespace_to_omegaconf(args)
-
+    print(cfg)
     if cfg.common.use_plasma_view:
         server = PlasmaStore(path=cfg.common.plasma_path)
         logger.info(

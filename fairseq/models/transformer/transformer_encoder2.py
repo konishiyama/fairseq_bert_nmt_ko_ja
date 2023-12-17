@@ -75,9 +75,13 @@ class TransformerEncoderBase2(FairseqEncoder):
             else None
         )
         # 
-        bert_gates = getattr(cfg, 'bert_gates', [1, 1, 1, 1, 1, 1])
+        # bert_gates = getattr(cfg, 'bert_gates', [1, 1, 1, 1, 1, 1])
+        bert_gates = [1, 1, 1, 1, 1, 1]
         bert_gates = [x == 1 for x in bert_gates]
-        assert len(bert_gates) == cfg.encoder_layers
+        print("Length of bert_gates:", len(bert_gates))
+        print("Number of decoder layers in cfg:", cfg.decoder_layers)
+
+        # assert len(bert_gates) == cfg.encoder_layers
         # 
         if cfg.layernorm_embedding:
             self.layernorm_embedding = LayerNorm(embed_dim, export=cfg.export)

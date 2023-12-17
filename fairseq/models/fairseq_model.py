@@ -292,16 +292,20 @@ class FairseqEncoderDecoderModel(BaseFairseqModel):
         decoder (FairseqDecoder): the decoder
     """
 
-    def __init__(self, encoder, decoder):
+    def __init__(self, encoder, decoder, bertencoder, berttokenizer, mask_cls_sep, cfg=None):
         super().__init__()
 
         self.encoder = encoder
         self.decoder = decoder
+        self.bert_encoder = bertencoder
+        self.berttokenizer = berttokenizer
+        self.mask_cls_sep = mask_cls_sep
+        self.bert_output_layer = getattr(cfg, 'bert_output_layer', -1)
 
         check_type(self.encoder, FairseqEncoder)
         check_type(self.decoder, FairseqDecoder)
 
-    def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
+    def forward(self, src_tokens, src_lengths, prev_output_tokens, bert_input, **kwargs):
         """
         Run the forward pass for an encoder-decoder model.
 
@@ -325,9 +329,19 @@ class FairseqEncoderDecoderModel(BaseFairseqModel):
                 - a dictionary with any model-specific outputs
         """
         encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
-        decoder_out = self.decoder(
-            prev_output_tokens, encoder_out=encoder_out, **kwargs
-        )
+        bert_encoder_padding_mask = bert_input.eq(self.berttokenizer.pad())
+        bert_encoder_out, _ =  self.bert_encoder(bert_input, output_all_encoded_layers=True, attention_mask= 1. - bert_encoder_padding_mask)
+        bert_encoder_out = bert_encoder_out[self.bert_output_layer]
+        if self.mask_cls_sep:
+            bert_encoder_padding_mask += bert_input.eq(self.berttokenizer.cls())
+            bert_encoder_padding_mask += bert_input.eq(self.berttokenizer.sep())
+        bert_encoder_out = bert_encoder_out.permute(1,0,2).contiguous()
+        # bert_encoder_out = F.linear(bert_encoder_out, self.trans_weight, self.trans_bias)
+        bert_encoder_out = {
+            'bert_encoder_out': bert_encoder_out,
+            'bert_encoder_padding_mask': bert_encoder_padding_mask,
+        }
+        decoder_out = self.decoder(prev_output_tokens, encoder_out=encoder_out, bert_encoder_out=bert_encoder_out, **kwargs)
         return decoder_out
 
     def forward_decoder(self, prev_output_tokens, **kwargs):

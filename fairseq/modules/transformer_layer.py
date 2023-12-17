@@ -244,7 +244,7 @@ class TransformerEncoderLayerBase2(nn.Module):
         cfg (argparse.Namespace): parsed command-line arguments
     """
     # 
-    def __init__(self, cfg, bert_gate=True, return_fc=False):
+    def __init__(self, cfg, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False, bert_gate=True, return_fc=False):
         super().__init__()
         self.cfg = cfg
         self.return_fc = return_fc
@@ -878,7 +878,7 @@ class TransformerDecoderLayerBase2(nn.Module):
     """
 
     def __init__(
-        self, cfg, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
+        self, cfg, bert_gate=True, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
     ):
         super().__init__()
         self.embed_dim = cfg.decoder.embed_dim

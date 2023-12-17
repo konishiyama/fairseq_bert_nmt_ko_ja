@@ -46,8 +46,8 @@ class TransformerModelBase2(FairseqEncoderDecoderModel):
         :prog:
     """
 
-    def __init__(self, cfg, encoder, decoder):
-        super().__init__(encoder, decoder)
+    def __init__(self, cfg, encoder, decoder, bertencoder, berttokenizer, mask_cls_sep=False):
+        super().__init__(encoder, decoder, bertencoder, berttokenizer, mask_cls_sep, cfg)
         self.cfg = cfg
         self.supports_align_args = True
 

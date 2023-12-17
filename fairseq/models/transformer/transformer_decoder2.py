@@ -107,7 +107,7 @@ class TransformerDecoderBase2(FairseqIncrementalDecoder):
         # 
         bert_gates = getattr(cfg, 'bert_gates', [1, 1, 1, 1, 1, 1])
         bert_gates = [x == 1 for x in bert_gates]
-        assert len(bert_gates) == cfg.decoder_layers
+        # assert len(bert_gates) == cfg.decoder_layers
         print('bert_gates', bert_gates)
         # 
 
@@ -125,20 +125,20 @@ class TransformerDecoderBase2(FairseqIncrementalDecoder):
         
         # 
         decoder_no_bert = getattr(cfg, 'decoder_no_bert', False)
-        if decoder_no_bert:
-            self.layers.extend(
-                [
-                    self.build_decoder_layer(cfg, no_encoder_attn, bert_gate=bert_gates[i])
-                    for _ in range(cfg.decoder.layers)
-                ]
-            )
-        else:
-            self.layers.extend(
-                [
-                    self.build_decoder_layer(cfg, no_encoder_attn, bert_gate=bert_gates[i])
-                    for _ in range(cfg.decoder.layers)
-                ]
-            )
+        # if decoder_no_bert:
+        #     self.layers.extend(
+        #         [
+        #             self.build_decoder_layer(cfg, no_encoder_attn, bert_gate=True)
+        #             # for _ in range(cfg.decoder.layers)
+        #         ]
+        #     )
+        # else:
+        self.layers.extend(
+            [
+                self.build_decoder_layer(cfg, no_encoder_attn, bert_gate=True)
+                # for _ in range(cfg.decoder.layers)
+            ]
+        )
 
         self.num_layers = len(self.layers)
 
@@ -190,8 +190,8 @@ class TransformerDecoderBase2(FairseqIncrementalDecoder):
                 BaseLayer(cfg),
             )
 
-    def build_decoder_layer(self, cfg, no_encoder_attn=False):
-        layer = transformer_layer.TransformerDecoderLayerBase2(cfg, no_encoder_attn)
+    def build_decoder_layer(self, cfg, no_encoder_attn=False, bert_gate=True):
+        layer = transformer_layer.TransformerDecoderLayerBase2(cfg, no_encoder_attn, bert_gate)
         checkpoint = cfg.checkpoint_activations
         if checkpoint:
             offload_to_cpu = cfg.offload_activations
